@@ -19,11 +19,17 @@ CardState :: enum {
 	RELEASED,
 }
 
+CardType :: enum {
+    SKILL,
+    SINGLE_TARGET,
+}
+
 Card :: struct {
 	using rect: rl.Rectangle,
 	color:      rl.Color,
-	status:     string,
+	text:     string,
 	state:      CardState,
+    type:       CardType,
 }
 
 Gui_Id :: distinct u64
@@ -56,6 +62,7 @@ GUI_State :: struct {
 	mouse_pressed:                 Mouse_Button_Set,
 	mouse_released:                Mouse_Button_Set,
 }
+
 
 gui_start :: proc(gui: ^GUI_State, camera: ^rl.Camera2D) {
 	gui.mouse_pos = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera^)
@@ -233,10 +240,12 @@ main :: proc() {
 			Card {
 				rect = {f32(x), f32(y), CARD_WIDTH, CARD_HEIGHT},
 				color = rl.DARKBLUE,
-				status = "red",
+				text = "red",
 			},
 		)
 	}
+
+    hand[0].type = .SINGLE_TARGET
 
 
 	camera := rl.Camera2D {
@@ -247,14 +256,6 @@ main :: proc() {
 
 		gui_start(&gui_state, &camera)
 
-		if rl.IsMouseButtonPressed(.LEFT) {
-
-			for &card in hand {
-				if rl.CheckCollisionPointRec(rl.GetMousePosition(), card.rect) {
-				}
-			}
-
-		}
 
 		rl.BeginDrawing()
 		rl.BeginMode2D(camera)
@@ -278,27 +279,35 @@ main :: proc() {
 				mp := rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 				gui_state.delta_rect_mouse = mp - {card.rect.x, card.rect.y}
 			case .Active in res:
-				color = rl.ORANGE
+                {
+                    color = rl.ORANGE
+                    card.state = .DRAGGING
+				    card.text = "dragging"
+                }
 			case .Hover in res:
 				color = rl.DARKGREEN
+                card.text = "hover"
+                card.state = .IDLE
+
 			case .Dragging in res:
 				color = rl.DARKPURPLE
+            case:
+                card.state = .IDLE
+                card.text = "idle"
 			}
 
 			if .Active in res {
 				card.state = .DRAGGING
-				card.status = "dragging"
+				card.text = "dragging"
 			} else {
-
-
-				if .Hover in res {card.status = "hover"} else {card.status = "idle"}
-
-				card.state = .IDLE
 
 				if int(card.rect.y + card.rect.height) < drop_line {
 					card.state = .RELEASED
-					card.status = "released"
+					card.text = "released"
 					color = rl.Color{66, 212, 245, 255}
+
+                    card.rect.x = f32(CARD_WIDTH * hand_size + gap * (hand_size - 1) / 2 - CARD_WIDTH / 2)
+
 				} else {
 
 					x :=
@@ -325,7 +334,7 @@ main :: proc() {
 
 			rl.DrawRectangleRec(card.rect, color)
 			rl.DrawText(
-				strings.clone_to_cstring(card.status),
+				strings.clone_to_cstring(card.text),
 				i32(card.rect.x),
 				i32(card.rect.y),
 				1,
