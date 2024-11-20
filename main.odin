@@ -1,9 +1,10 @@
 package main
 
 import "core:fmt"
+import "core:math"
+import "core:math/linalg"
 import "core:strings"
 import rl "vendor:raylib"
-import "core:math/linalg"
 
 
 CARD_WIDTH :: 25
@@ -17,21 +18,21 @@ CardState :: enum {
 	IDLE,
 	DRAGGING,
 	RELEASED,
-    AIMING,
+	AIMING,
 }
 
 CardType :: enum {
-    SKILL,
-    SINGLE_TARGET,
+	SKILL,
+	SINGLE_TARGET,
 }
 
 Card :: struct {
-    position:   rl.Vector2,
-	color:      rl.Color,
-	text:       string,
-	state:      CardState,
-    type:       CardType,
-    animating:  bool,
+	position:  rl.Vector2,
+	color:     rl.Color,
+	text:      string,
+	state:     CardState,
+	type:      CardType,
+	animating: bool,
 }
 
 Gui_Id :: distinct u64
@@ -66,8 +67,9 @@ GUI_State :: struct {
 }
 
 
-gui_start :: proc(gui: ^GUI_State, camera: ^rl.Camera2D) {
-	gui.mouse_pos = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera^)
+gui_start :: proc(gui: ^GUI_State) {
+
+	gui.mouse_pos = rl.GetMousePosition()
 
 	gui.mouse_down = nil
 	gui.mouse_pressed = nil
@@ -217,7 +219,11 @@ update_control :: proc(
 //}
 
 pos_to_rect :: proc(pos: rl.Vector2) -> rl.Rectangle {
-    return {pos.x, pos.y, CARD_WIDTH, CARD_HEIGHT}
+	return {pos.x, pos.y, CARD_WIDTH, CARD_HEIGHT}
+}
+
+ease_out_cubic :: proc(number: f32) -> f32 {
+	return 1.0 - math.pow(1 - number, 3)
 }
 
 main :: proc() {
@@ -242,28 +248,28 @@ main :: proc() {
 	hand_width := CARD_WIDTH * hand_size + gap * (hand_size - 1)
 	hand_middle := hand_width / 2
 
-    reset_hand := proc(hand: [dynamic]Card) {
+	reset_hand := proc(hand: [dynamic]Card) {
 
-        hand_size := 4
-	    gap := 10
-	    hand_width := CARD_WIDTH * hand_size + gap * (hand_size - 1)
-	    hand_middle := hand_width / 2
+		hand_size := 4
+		gap := 10
+		hand_width := CARD_WIDTH * hand_size + gap * (hand_size - 1)
+		hand_middle := hand_width / 2
 
-        for i in 0 ..< len(hand) {
-            x :=
-                (i * (CARD_WIDTH + gap)) +
-                int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
-                int(hand_middle)
+		for i in 0 ..< len(hand) {
+			x :=
+				(i * (CARD_WIDTH + gap)) +
+				int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
+				int(hand_middle)
 
-            y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
+			y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
 
-            hand[i].position.x = f32(x)
-            hand[i].position.y = f32(y)
+			hand[i].position.x = f32(x)
+			hand[i].position.y = f32(y)
 
-            hand[i].state = .IDLE
-	    }
+			hand[i].state = .IDLE
+		}
 
-    }
+	}
 
 	for i in 0 ..< hand_size {
 		x :=
@@ -273,17 +279,10 @@ main :: proc() {
 
 		y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
 
-		append(
-			&hand,
-			Card {
-				position = {f32(x), f32(y)},
-				color = rl.DARKBLUE,
-				text = "red",
-			},
-		)
+		append(&hand, Card{position = {f32(x), f32(y)}, color = rl.DARKBLUE, text = "red"})
 	}
 
-    hand[0].type = .SINGLE_TARGET
+	hand[0].type = .SINGLE_TARGET
 
 
 	camera := rl.Camera2D {
@@ -292,15 +291,17 @@ main :: proc() {
 
 	for !rl.WindowShouldClose() {
 
-        if rl.IsKeyPressed(.R) {
-            reset_hand(hand)
-        }
+		if rl.IsKeyPressed(.R) {
+			reset_hand(hand)
+		}
 
-		gui_start(&gui_state, &camera)
+		gui_start(&gui_state)
 
 
 		rl.BeginDrawing()
 		rl.BeginMode2D(camera)
+
+		rl.SetMouseScale(0.2, 0.2)
 
 
 		rl.ClearBackground(rl.BLACK)
@@ -318,59 +319,113 @@ main :: proc() {
 
 			switch {
 			case .Click in res:
-				mp := rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
+				mp := rl.GetMousePosition()
 				gui_state.delta_rect_mouse = mp - card.position
 			case .Active in res:
-                {
-                    if card.state != .IDLE { break }
-                    color = rl.RED
-                    card.state = .DRAGGING
-				    card.text = "dragging"
-                }
-            case .Active not_in res:
-                {
-                    if card.state != .DRAGGING { break }
-                    if int(card.position.y + CARD_HEIGHT) < drop_line {
-                        switch card.type {
-                        case .SINGLE_TARGET:
-                            card.state = .AIMING
-                            card.text = "aiming"
-                            card.animating = true
-                        case .SKILL:
-                            card.state = .RELEASED
-                            card.text = "released"
-                            color = rl.Color{66, 212, 245, 255}
-                        }
+				{
+					if card.state != .IDLE {break}
+					color = rl.RED
+					card.state = .DRAGGING
+				}
+			case .Active not_in res:
+				{
+					if card.state != .DRAGGING {break}
+					if int(card.position.y + CARD_HEIGHT) < drop_line {
+						switch card.type {
+						case .SINGLE_TARGET:
+							card.state = .AIMING
+							card.animating = true
+						case .SKILL:
+							card.state = .RELEASED
+							color = rl.Color{66, 212, 245, 255}
+						}
 
-                    } else {
-                        card.state = .IDLE
-                        card.text = "idle"
+					} else {
+						card.state = .IDLE
 
 
-                        x := (i * (CARD_WIDTH + gap)) +
-                        int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
-                        int(hand_middle)
+						x :=
+							(i * (CARD_WIDTH + gap)) +
+							int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
+							int(hand_middle)
 
-                        y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
+						y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
 
-                        card.position = {f32(x), f32(y)}
-                    }
-                }
+						card.position = {f32(x), f32(y)}
+					}
+				}
 			}
 
 			if card.state == .DRAGGING {
-                color = rl.RED
+				color = rl.SKYBLUE
 				mp := gui_state.mouse_pos
-
 				card.position = mp - gui_state.delta_rect_mouse
 
-			} else if card.state == .AIMING {
-                card.position.y = linalg.lerp(card.position.y, 70, 0.1)
-                card.position.x = linalg.lerp(card.position.x, f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - CARD_WIDTH / 2, 0.1)
-            } else if card.state == .RELEASED {
-                color = rl.Color{66, 212, 245, 255}
-            }
+				if card.position.y + CARD_HEIGHT < f32(drop_line) && card.type == .SINGLE_TARGET {
+					card.state = .AIMING
+				}
 
+			} else if card.state == .AIMING {
+				mp := rl.GetMousePosition()
+				if mp.y > f32(drop_line) {
+					card.state = .IDLE
+
+					x :=
+						(i * (CARD_WIDTH + gap)) +
+						int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
+						int(hand_middle)
+
+					y := 104
+
+					card.position = {f32(x), f32(y)}
+				} else {
+
+					card.position.y = linalg.lerp(card.position.y, 70, 0.1)
+					card.position.x = linalg.lerp(
+						card.position.x,
+						f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - CARD_WIDTH / 2,
+						0.1,
+					)
+
+					start := rl.Vector2{f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2), 70}
+
+					target := rl.GetMousePosition()
+					distance := target - start
+
+
+					point_count := 15
+					points := [dynamic]rl.Vector2{}
+
+					for i in 0 ..< point_count {
+						t := (1.0 / f32(point_count)) * f32(i)
+
+						x := start.x + (distance.x / f32(point_count)) * f32(i)
+
+						y := start.y + ease_out_cubic(t) * distance.y
+
+						append(&points, rl.Vector2{x, y})
+					}
+
+					append(&points, target)
+
+					thick := f32(2)
+					for i in 0 ..< len(points) - 1 {
+						rl.DrawLineEx(points[i], points[i + 1], thick, rl.WHITE)
+					}
+
+				}
+
+			} else if card.state == .RELEASED {
+				color = rl.Color{66, 212, 245, 255}
+			}
+
+
+			switch card.type {
+			case .SINGLE_TARGET:
+				card.text = "SINGLE"
+			case .SKILL:
+				card.text = "SKILL"
+			}
 
 			rl.DrawRectangleRec(pos_to_rect(card.position), color)
 			rl.DrawText(
