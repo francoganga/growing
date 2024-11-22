@@ -365,56 +365,6 @@ main :: proc() {
 					card.state = .AIMING
 				}
 
-			} else if card.state == .AIMING {
-				mp := rl.GetMousePosition()
-				if mp.y > f32(drop_line) {
-					card.state = .IDLE
-
-					x :=
-						(i * (CARD_WIDTH + gap)) +
-						int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
-						int(hand_middle)
-
-					y := 104
-
-					card.position = {f32(x), f32(y)}
-				} else {
-
-					card.position.y = linalg.lerp(card.position.y, 70, 0.1)
-					card.position.x = linalg.lerp(
-						card.position.x,
-						f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - CARD_WIDTH / 2,
-						0.1,
-					)
-
-					start := rl.Vector2{f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2), 70}
-
-					target := rl.GetMousePosition()
-					distance := target - start
-
-
-					point_count := 15
-					points := [dynamic]rl.Vector2{}
-
-					for i in 0 ..< point_count {
-						t := (1.0 / f32(point_count)) * f32(i)
-
-						x := start.x + (distance.x / f32(point_count)) * f32(i)
-
-						y := start.y + ease_out_cubic(t) * distance.y
-
-						append(&points, rl.Vector2{x, y})
-					}
-
-					append(&points, target)
-
-					thick := f32(2)
-					for i in 0 ..< len(points) - 1 {
-						rl.DrawLineEx(points[i], points[i + 1], thick, rl.WHITE)
-					}
-
-				}
-
 			} else if card.state == .RELEASED {
 				color = rl.Color{66, 212, 245, 255}
 			}
@@ -436,15 +386,72 @@ main :: proc() {
 				rl.WHITE,
 			)
 
+            if card.state == .AIMING {
+				mp := rl.GetMousePosition()
+				if mp.y > f32(drop_line) {
+					card.state = .IDLE
+
+					x :=
+						(i * (CARD_WIDTH + gap)) +
+						int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
+						int(hand_middle)
+
+					y := 104
+
+					card.position = {f32(x), f32(y)}
+				} else {
+
+					card.position.y = linalg.lerp(card.position.y, 70, 0.1)
+					card.position.x = linalg.lerp(
+						card.position.x,
+						f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - CARD_WIDTH / 2,
+						0.1,
+					)
+
+					start := rl.Vector2{card.position.x + CARD_WIDTH / 2, 70}
+
+					target := rl.GetMousePosition()
+					distance := target - start
+
+
+					point_count := 15
+					points := [dynamic]rl.Vector2{}
+
+					for i in 0 ..< point_count {
+						t := (1.0 / f32(point_count)) * f32(i)
+
+						x := start.x + (distance.x / f32(point_count)) * f32(i)
+
+						y := start.y + ease_out_cubic(t) * distance.y
+
+						append(&points, rl.Vector2{x, y})
+					}
+
+					append(&points, target)
+
+                    //rl.DrawLineStrip(raw_data(points), i32(point_count + 1), rl.WHITE)
+
+					thick := f32(2)
+					for i in 0 ..< len(points) - 1 {
+                        thick -= 0.1
+						rl.DrawLineEx(points[i], points[i + 1], thick, rl.YELLOW)
+					}
+
+				}
+
+			}
+
+
+
 		}
 
-		rl.DrawRectangleLines(
-			i32(gui_state.drop_area.x),
-			i32(gui_state.drop_area.y),
-			i32(gui_state.drop_area.width),
-			i32(gui_state.drop_area.height),
-			rl.RED,
-		)
+		//rl.DrawRectangleLines(
+		//	i32(gui_state.drop_area.x),
+		//	i32(gui_state.drop_area.y),
+		//	i32(gui_state.drop_area.width),
+		//	i32(gui_state.drop_area.height),
+		//	rl.RED,
+		//)
 
 		//rl.DrawText(fmt.ctprintf("sp: %v, wp: %v", sp, wp), 0, 0, 1, rl.WHITE)
 
