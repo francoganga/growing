@@ -14,11 +14,19 @@ SCREEN_SIZE :: [2]int{256, 144}
 
 CAMERA_ZOOM :: 5.0
 
-CardState :: enum {
-	IDLE,
-	DRAGGING,
-	RELEASED,
-	AIMING,
+Card_IDLE     :: struct {}
+Card_DRAGGING :: struct {}
+Card_RELEASED :: struct {}
+Card_AIMING   :: struct {
+    targets: [dynamic]rl.Vector2
+}
+
+
+CardState :: union #no_nil {
+    Card_IDLE,
+    Card_DRAGGING,
+    Card_RELEASED,
+    Card_AIMING  
 }
 
 CardType :: enum {
@@ -266,7 +274,7 @@ main :: proc() {
 			hand[i].position.x = f32(x)
 			hand[i].position.y = f32(y)
 
-			hand[i].state = .IDLE
+			hand[i].state = Card_IDLE{}
 		}
 
 	}
@@ -323,25 +331,27 @@ main :: proc() {
 				gui_state.delta_rect_mouse = mp - card.position
 			case .Active in res:
 				{
-					if card.state != .IDLE {break}
+                    _, isIdle := card.state.(Card_IDLE)
+
+					if _, isIdle := card.state.(Card_IDLE); !isIdle {break}
 					color = rl.RED
-					card.state = .DRAGGING
+					card.state = Card_DRAGGING{}
 				}
 			case .Active not_in res:
 				{
-					if card.state != .DRAGGING {break}
+					if _, isDragging := card.state.(Card_DRAGGING); !isDragging {break}
 					if int(card.position.y + CARD_HEIGHT) < drop_line {
 						switch card.type {
 						case .SINGLE_TARGET:
-							card.state = .AIMING
+							card.state = Card_AIMING{}
 							card.animating = true
 						case .SKILL:
-							card.state = .RELEASED
+							card.state = Card_RELEASED{}
 							color = rl.Color{66, 212, 245, 255}
 						}
 
 					} else {
-						card.state = .IDLE
+						card.state = Card_IDLE{}
 
 
 						x :=
@@ -356,16 +366,16 @@ main :: proc() {
 				}
 			}
 
-			if card.state == .DRAGGING {
+			if _, isDragging := card.state.(Card_DRAGGING); isDragging {
 				color = rl.SKYBLUE
 				mp := gui_state.mouse_pos
 				card.position = mp - gui_state.delta_rect_mouse
 
 				if card.position.y + CARD_HEIGHT < f32(drop_line) && card.type == .SINGLE_TARGET {
-					card.state = .AIMING
+					card.state = Card_AIMING{}
 				}
 
-			} else if card.state == .RELEASED {
+			} else if _, isReleased := card.state.(Card_RELEASED); isReleased {
 				color = rl.Color{66, 212, 245, 255}
 			}
 
@@ -386,10 +396,10 @@ main :: proc() {
 				rl.WHITE,
 			)
 
-            if card.state == .AIMING {
+            if state, isAiming := &card.state.(Card_AIMING); isAiming {
 				mp := rl.GetMousePosition()
 				if mp.y > f32(drop_line) {
-					card.state = .IDLE
+					card.state = Card_IDLE{}
 
 					x :=
 						(i * (CARD_WIDTH + gap)) +
@@ -437,6 +447,9 @@ main :: proc() {
 						rl.DrawLineEx(points[i], points[i + 1], thick, rl.YELLOW)
 					}
 
+                    if rl.IsMouseButtonPressed(.LEFT) {
+                        append(&state.targets, rl.GetMousePosition())
+                    }
 				}
 
 			}
