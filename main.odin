@@ -5,6 +5,7 @@ import "core:math"
 import "core:math/linalg"
 import "core:strings"
 import rl "vendor:raylib"
+import "core:slice"
 
 
 CARD_WIDTH :: 25
@@ -55,7 +56,6 @@ Mouse_Button_Set :: distinct bit_set[Mouse_Button]
 
 GUI_State :: struct {
 	delta_rect_mouse:              rl.Vector2,
-	drop_area:                     rl.Rectangle,
 	width, height:                 i32,
 	hover_id, active_id:           Gui_Id,
 	last_hover_id, last_active_id: Gui_Id,
@@ -234,6 +234,25 @@ ease_out_cubic :: proc(number: f32) -> f32 {
 	return 1.0 - math.pow(1 - number, 3)
 }
 
+
+Selecting :: struct {
+    card: ^Card,
+}
+
+Idle :: struct {}
+
+GameState :: union #no_nil {
+    Idle,
+    Selecting,
+}
+
+Game :: struct {
+    hand: [dynamic]Card,
+    state: GameState,
+    gui_state: GUI_State,
+}
+
+
 main :: proc() {
 
 	rl.InitWindow(1280, 720, "example")
@@ -243,20 +262,17 @@ main :: proc() {
 	sw := rl.GetScreenWidth() / CAMERA_ZOOM
 	sh := rl.GetScreenHeight() / CAMERA_ZOOM
 
-	gui_state: GUI_State
-
-	gui_state.drop_area = {0, 0, f32(sw), 100}
-
 	drop_line := 100
 
-	hand := [dynamic]Card{}
+    game := Game {}
+	game.hand = [dynamic]Card{}
 
 	hand_size := 4
 	gap := 10
 	hand_width := CARD_WIDTH * hand_size + gap * (hand_size - 1)
 	hand_middle := hand_width / 2
 
-	reset_hand := proc(hand: [dynamic]Card) {
+	reset_hand := proc(hand: []Card) {
 
 		hand_size := 4
 		gap := 10
@@ -287,10 +303,10 @@ main :: proc() {
 
 		y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
 
-		append(&hand, Card{position = {f32(x), f32(y)}, color = rl.DARKBLUE, text = "red"})
+		append(&game.hand, Card{position = {f32(x), f32(y)}, color = rl.DARKBLUE, text = "red"})
 	}
 
-	hand[0].type = .SINGLE_TARGET
+	game.hand[0].type = .SINGLE_TARGET
 
 
 	camera := rl.Camera2D {
@@ -300,10 +316,10 @@ main :: proc() {
 	for !rl.WindowShouldClose() {
 
 		if rl.IsKeyPressed(.R) {
-			reset_hand(hand)
+			reset_hand(game.hand[:])
 		}
 
-		gui_start(&gui_state)
+		gui_start(&game.gui_state)
 
 
 		rl.BeginDrawing()
@@ -318,17 +334,17 @@ main :: proc() {
 
 		//rl.DrawRectangle(x, 100, CARD_WIDTH, CARD_HEIGHT, rl.DARKBLUE)
 
-		for &card, i in hand {
+		for &card, i in game.hand {
 
 			id := Gui_Id(uintptr(&card))
-			res := update_control(&gui_state, id, pos_to_rect(card.position))
+			res := update_control(&game.gui_state, id, pos_to_rect(card.position))
 
 			color := card.color
 
 			switch {
 			case .Click in res:
 				mp := rl.GetMousePosition()
-				gui_state.delta_rect_mouse = mp - card.position
+				game.gui_state.delta_rect_mouse = mp - card.position
 			case .Active in res:
 				{
                     _, isIdle := card.state.(Card_IDLE)
@@ -368,8 +384,8 @@ main :: proc() {
 
 			if _, isDragging := card.state.(Card_DRAGGING); isDragging {
 				color = rl.SKYBLUE
-				mp := gui_state.mouse_pos
-				card.position = mp - gui_state.delta_rect_mouse
+				mp := game.gui_state.mouse_pos
+				card.position = mp - game.gui_state.delta_rect_mouse
 
 				if card.position.y + CARD_HEIGHT < f32(drop_line) && card.type == .SINGLE_TARGET {
 					card.state = Card_AIMING{}
@@ -444,7 +460,7 @@ main :: proc() {
 					thick := f32(2)
 					for i in 0 ..< len(points) - 1 {
                         thick -= 0.1
-						rl.DrawLineEx(points[i], points[i + 1], thick, rl.YELLOW)
+						rl.DrawLineEx(points[i], points[i + 1], thick, rl.WHITE)
 					}
 
                     if rl.IsMouseButtonPressed(.LEFT) {
@@ -469,7 +485,7 @@ main :: proc() {
 		//rl.DrawText(fmt.ctprintf("sp: %v, wp: %v", sp, wp), 0, 0, 1, rl.WHITE)
 
 
-		gui_end(&gui_state)
+		gui_end(&game.gui_state)
 
 		rl.EndMode2D()
 
