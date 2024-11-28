@@ -15,19 +15,21 @@ SCREEN_SIZE :: [2]int{256, 144}
 
 CAMERA_ZOOM :: 5.0
 
-Card_IDLE     :: struct {}
-Card_DRAGGING :: struct {}
-Card_RELEASED :: struct {}
-Card_AIMING   :: struct {
-    targets: [dynamic]rl.Vector2
-}
+DROP_LINE :: 100
+
+CARD_GAP :: 10
+HAND_SIZE :: 5
+
+HAND_WIDTH :: CARD_WIDTH * HAND_SIZE + CARD_GAP * (HAND_SIZE - 1)
+HAND_MIDDLE :: HAND_WIDTH / 2
 
 
-CardState :: union #no_nil {
-    Card_IDLE,
-    Card_DRAGGING,
-    Card_RELEASED,
-    Card_AIMING  
+
+CardState :: enum {
+    IDLE,
+    DRAGGING,
+    RELEASED,
+    AIMING  
 }
 
 CardType :: enum {
@@ -239,17 +241,128 @@ Selecting :: struct {
     card: ^Card,
 }
 
+Aiming :: struct {
+    card: ^Card,
+    //targets: []int,
+}
+
 Idle :: struct {}
 
 GameState :: union #no_nil {
     Idle,
     Selecting,
+    Aiming,
 }
 
 Game :: struct {
     hand: [dynamic]Card,
     state: GameState,
     gui_state: GUI_State,
+}
+
+
+reset_hand :: proc(hand: []Card) {
+    hand_size := 4
+    gap := 10
+    hand_width := CARD_WIDTH * hand_size + gap * (hand_size - 1)
+    hand_middle := hand_width / 2
+
+    for i in 0 ..< len(hand) {
+        x :=
+        (i * (CARD_WIDTH + gap)) +
+        int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
+        int(hand_middle)
+
+        y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
+
+        hand[i].position.x = f32(x)
+        hand[i].position.y = f32(y)
+
+        hand[i].state = .IDLE
+    }
+
+}
+
+
+draw_hand :: proc(game: ^Game) {
+    for &card, i in game.hand {
+        if card.state == .DRAGGING { continue }
+        rl.DrawRectangleRec(pos_to_rect(card.position), rl.DARKBLUE)
+        rl.DrawText(
+            strings.clone_to_cstring(card.text),
+            i32(card.position.x),
+            i32(card.position.y),
+            1,
+            rl.WHITE,
+        )
+
+        //if state, isAiming := &game.state.(Aiming); isAiming {
+        //    mp := rl.GetMousePosition()
+        //    if mp.y > f32(DROP_LINE) {
+        //        card.state = Card_IDLE{}
+
+        //        x :=
+        //        (i * (CARD_WIDTH + CARD_GAP)) +
+        //        int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
+        //        int(HAND_MIDDLE)
+
+        //        y := 104
+
+        //        card.position = {f32(x), f32(y)}
+        //        } else {
+
+        //            card.position.y = linalg.lerp(card.position.y, 70, 0.1)
+        //            card.position.x = linalg.lerp(
+        //                card.position.x,
+        //                f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - CARD_WIDTH / 2,
+        //                0.1,
+        //            )
+
+        //            start := rl.Vector2{card.position.x + CARD_WIDTH / 2, 70}
+
+        //            target := rl.GetMousePosition()
+        //            distance := target - start
+
+
+        //            point_count := 15
+        //            points := [dynamic]rl.Vector2{}
+
+        //            for i in 0 ..< point_count {
+        //                t := (1.0 / f32(point_count)) * f32(i)
+
+        //                x := start.x + (distance.x / f32(point_count)) * f32(i)
+
+        //                y := start.y + ease_out_cubic(t) * distance.y
+
+        //                append(&points, rl.Vector2{x, y})
+        //            }
+
+        //            append(&points, target)
+
+        //            //rl.DrawLineStrip(raw_data(points), i32(point_count + 1), rl.WHITE)
+
+        //            thick := f32(2)
+        //            for i in 0 ..< len(points) - 1 {
+        //                thick -= 0.1
+        //                rl.DrawLineEx(points[i], points[i + 1], thick, rl.WHITE)
+        //            }
+        //        }
+        //}
+    }
+
+    switch state in  game.state {
+    case Selecting:
+        rl.DrawRectangleRec(pos_to_rect(state.card.position), rl.DARKGREEN)
+        rl.DrawText(
+            strings.clone_to_cstring(state.card.text),
+            i32(state.card.position.x),
+            i32(state.card.position.y),
+            1,
+            rl.WHITE,
+        )
+    case Idle:
+    case Aiming:
+    }
 }
 
 
@@ -271,29 +384,6 @@ main :: proc() {
 	gap := 10
 	hand_width := CARD_WIDTH * hand_size + gap * (hand_size - 1)
 	hand_middle := hand_width / 2
-
-	reset_hand := proc(hand: []Card) {
-
-		hand_size := 4
-		gap := 10
-		hand_width := CARD_WIDTH * hand_size + gap * (hand_size - 1)
-		hand_middle := hand_width / 2
-
-		for i in 0 ..< len(hand) {
-			x :=
-				(i * (CARD_WIDTH + gap)) +
-				int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
-				int(hand_middle)
-
-			y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
-
-			hand[i].position.x = f32(x)
-			hand[i].position.y = f32(y)
-
-			hand[i].state = Card_IDLE{}
-		}
-
-	}
 
 	for i in 0 ..< hand_size {
 		x :=
@@ -347,28 +437,27 @@ main :: proc() {
 				game.gui_state.delta_rect_mouse = mp - card.position
 			case .Active in res:
 				{
-                    _, isIdle := card.state.(Card_IDLE)
-
-					if _, isIdle := card.state.(Card_IDLE); !isIdle {break}
-					color = rl.RED
-					card.state = Card_DRAGGING{}
+					if card.state != .IDLE {break}
+					card.state = .DRAGGING
+                    game.state = Selecting { &card }
 				}
 			case .Active not_in res:
 				{
-					if _, isDragging := card.state.(Card_DRAGGING); !isDragging {break}
+                    if _, isSelecting := game.state.(Selecting); !isSelecting { break }
+					if card.state != .DRAGGING { break }
 					if int(card.position.y + CARD_HEIGHT) < drop_line {
 						switch card.type {
 						case .SINGLE_TARGET:
-							card.state = Card_AIMING{}
-							card.animating = true
+							card.state = .AIMING
+                            game.state = Aiming{ &card }
 						case .SKILL:
-							card.state = Card_RELEASED{}
-							color = rl.Color{66, 212, 245, 255}
+							card.state = .RELEASED
+                            game.state = Idle{}
 						}
 
 					} else {
-						card.state = Card_IDLE{}
-
+						card.state = .IDLE
+                        game.state = Idle{}
 
 						x :=
 							(i * (CARD_WIDTH + gap)) +
@@ -382,19 +471,15 @@ main :: proc() {
 				}
 			}
 
-			if _, isDragging := card.state.(Card_DRAGGING); isDragging {
-				color = rl.SKYBLUE
+			if gs, isSelecting := game.state.(Selecting); isSelecting {
 				mp := game.gui_state.mouse_pos
-				card.position = mp - game.gui_state.delta_rect_mouse
+				gs.card.position = mp - game.gui_state.delta_rect_mouse
+                game.state = Selecting { gs.card }
 
-				if card.position.y + CARD_HEIGHT < f32(drop_line) && card.type == .SINGLE_TARGET {
-					card.state = Card_AIMING{}
+				if gs.card.position.y + CARD_HEIGHT < f32(drop_line) && gs.card.type == .SINGLE_TARGET {
+                    game.state = Aiming{ gs.card }
 				}
-
-			} else if _, isReleased := card.state.(Card_RELEASED); isReleased {
-				color = rl.Color{66, 212, 245, 255}
 			}
-
 
 			switch card.type {
 			case .SINGLE_TARGET:
@@ -402,77 +487,9 @@ main :: proc() {
 			case .SKILL:
 				card.text = "SKILL"
 			}
-
-			rl.DrawRectangleRec(pos_to_rect(card.position), color)
-			rl.DrawText(
-				strings.clone_to_cstring(card.text),
-				i32(card.position.x),
-				i32(card.position.y),
-				1,
-				rl.WHITE,
-			)
-
-            if state, isAiming := &card.state.(Card_AIMING); isAiming {
-				mp := rl.GetMousePosition()
-				if mp.y > f32(drop_line) {
-					card.state = Card_IDLE{}
-
-					x :=
-						(i * (CARD_WIDTH + gap)) +
-						int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
-						int(hand_middle)
-
-					y := 104
-
-					card.position = {f32(x), f32(y)}
-				} else {
-
-					card.position.y = linalg.lerp(card.position.y, 70, 0.1)
-					card.position.x = linalg.lerp(
-						card.position.x,
-						f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - CARD_WIDTH / 2,
-						0.1,
-					)
-
-					start := rl.Vector2{card.position.x + CARD_WIDTH / 2, 70}
-
-					target := rl.GetMousePosition()
-					distance := target - start
-
-
-					point_count := 15
-					points := [dynamic]rl.Vector2{}
-
-					for i in 0 ..< point_count {
-						t := (1.0 / f32(point_count)) * f32(i)
-
-						x := start.x + (distance.x / f32(point_count)) * f32(i)
-
-						y := start.y + ease_out_cubic(t) * distance.y
-
-						append(&points, rl.Vector2{x, y})
-					}
-
-					append(&points, target)
-
-                    //rl.DrawLineStrip(raw_data(points), i32(point_count + 1), rl.WHITE)
-
-					thick := f32(2)
-					for i in 0 ..< len(points) - 1 {
-                        thick -= 0.1
-						rl.DrawLineEx(points[i], points[i + 1], thick, rl.WHITE)
-					}
-
-                    if rl.IsMouseButtonPressed(.LEFT) {
-                        append(&state.targets, rl.GetMousePosition())
-                    }
-				}
-
-			}
-
-
-
 		}
+
+        draw_hand(&game)
 
 		//rl.DrawRectangleLines(
 		//	i32(gui_state.drop_area.x),
