@@ -290,20 +290,27 @@ draw_hand :: proc(game: ^Game) {
     aiming: bool
 
     for &card, i in game.hand {
+        color := rl.DARKBLUE
 
-        if card.state == .DRAGGING {
-            dragging_idx = i
-            dragging_card = card
-        }
+        switch card.state {
+            case .RELEASED: continue 
+            case .DRAGGING:
+                dragging_idx = i
+                dragging_card = card
+            case .AIMING:
+                aiming = true 
+                aiming_card = card
+            case .IDLE:
+                x := (i * (CARD_WIDTH + CARD_GAP)) + int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - int(HAND_MIDDLE)
+		        y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
 
-        if card.state == .AIMING {
-            aiming = true 
-            aiming_card = card
+		        card.position.x = f32(x)
+		        card.position.y = f32(y)
         }
 
 
         if dragging_idx != i {
-            rl.DrawRectangleRec(pos_to_rect(card.position), rl.DARKBLUE)
+            rl.DrawRectangleRec(pos_to_rect(card.position), color)
             rl.DrawText(
                 strings.clone_to_cstring(card.text),
                 i32(card.position.x),
@@ -311,7 +318,6 @@ draw_hand :: proc(game: ^Game) {
                 1,
                 rl.WHITE,
             )
-            rl.DrawRectangleLines(i32(card.position.x), i32(card.position.y), CARD_WIDTH + 1, CARD_HEIGHT + 1, rl.SKYBLUE)
         }
     }
 
@@ -327,6 +333,15 @@ draw_hand :: proc(game: ^Game) {
     }
 
     if aiming {
+
+        rl.DrawRectangleRec(pos_to_rect(aiming_card.position), rl.MAGENTA)
+        rl.DrawText(
+            strings.clone_to_cstring(aiming_card.text),
+            i32(aiming_card.position.x),
+            i32(aiming_card.position.y),
+            1,
+            rl.WHITE,
+        )
 
         start := rl.Vector2{aiming_card.position.x + CARD_WIDTH / 2, 70}
 
@@ -413,7 +428,7 @@ main :: proc() {
 
 		//rl.DrawRectangle(x, 100, CARD_WIDTH, CARD_HEIGHT, rl.DARKBLUE)
 
-		for &card, i in game.hand {
+        #reverse for &card, i in game.hand {
 
 			id := Gui_Id(uintptr(&card))
 			res := update_control(&game.gui_state, id, pos_to_rect(card.position))
@@ -437,7 +452,7 @@ main :: proc() {
 						case .SINGLE_TARGET:
 							card.state = .AIMING
 						case .SKILL:
-							card.state = .RELEASED
+                            ordered_remove(&game.hand, i)
 						}
 
 					} else {
