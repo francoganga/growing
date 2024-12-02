@@ -487,11 +487,7 @@ main :: proc() {
                     card.position = {f32(x), f32(y)}
                 } else {
                     card.position.y = linalg.lerp(card.position.y, 70, 0.1)
-                    card.position.x = linalg.lerp(
-                        card.position.x,
-                        f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - CARD_WIDTH / 2,
-                        0.1
-                    )
+                    card.position.x = linalg.lerp(card.position.x, f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - CARD_WIDTH / 2, 0.1)
                 }
             }
 
