@@ -40,7 +40,8 @@ Player :: struct {
 	upgrades:        [dynamic]Upgrade,
 	fields:          [dynamic]Field,
 	seeds:           [dynamic]SeedCard,
-	tooldeck:        [dynamic]Tool,
+	toolDeck:        [dynamic]Tool,
+    toolDiscard:     [dynamic]Tool,
 	hand:            [dynamic]ToolCard,
 }
 
@@ -72,11 +73,11 @@ ToolCard :: struct {
 
 make_player :: proc() -> (player: Player) {
     player.money = 0
-    player.tooldeck = make([dynamic]Tool, 15)
+    player.toolDeck = make([dynamic]Tool, 15)
     player.seeds = make([dynamic]SeedCard, 20)
 
     for t, i in default_tool_deck {
-        player.tooldeck[i] = t
+        player.toolDeck[i] = t
     }
 
     return player
