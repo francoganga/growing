@@ -374,7 +374,7 @@ draw_hand :: proc(game: ^Game) {
 }
 
 
-main :: proc() {
+main2 :: proc() {
 
 	rl.InitWindow(1280, 720, "example")
 
@@ -509,4 +509,29 @@ main :: proc() {
 	}
 
 	rl.CloseWindow()
+}
+
+import gg "./game"
+import "core:math/rand"
+
+main :: proc() {
+    player := gg.make_player()
+
+    rand.shuffle(player.tooldeck[:])
+
+    fmt.printf("player=%v\n", player)
+
+    draw_card := proc(player: ^gg.Player) {
+        tool, ok := pop_safe(&player.tooldeck)
+
+        if !ok { return }
+
+        tc := gg.ToolCard{ tool }
+
+        append(&player.hand, tc)
+    }
+
+    draw_card(&player)
+
+    fmt.printf("player=%v\n", player)
 }
