@@ -518,16 +518,28 @@ import "core:math/rand"
 
 main :: proc() {
     player := gg.make_player()
+    player.fields[0] = gg.Field { card = &player.seeds[0], water_level = 0 }
 
     rand.shuffle(player.toolDeck[:])
 
-    fmt.printf("len(toolDeck) = %d\n", len(player.toolDeck))
-
     gg.get_hand(&player)
 
-    for tool, i in player.hand {
-        fmt.printf("tool%d => %v\n", i, tool)
-    }
+    a := gg.Action_Water{ field = &player.fields[0], power = 1}
+
+    fmt.printf("before=%v\n", player.fields[0])
+
+    gg.do_action(&player, a)
+    gg.undo_action(&player)
+    gg.undo_action(&player)
+    gg.undo_action(&player)
+    gg.undo_action(&player)
+    gg.undo_action(&player)
+    gg.undo_action(&player)
+    gg.undo_action(&player)
+
+    fmt.printf("after=%v\n", player.fields[0])
+
+
 
 
 

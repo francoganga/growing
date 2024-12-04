@@ -1,5 +1,7 @@
 package game
 
+import "core:fmt"
+
 default_tool_deck :: [15]Tool {
 	.WateringCan,
 	.WateringCan,
@@ -23,6 +25,22 @@ watering_levels :: [Seed]int {
     .Tomato = 2,
 }
 
+// ------ACTIONS--------- //
+Action_Water :: struct {
+    power: int,
+    field: ^Field,
+}
+
+Action_Reap :: struct {
+    target: ^SeedCard,
+}
+
+Action :: union {
+    Action_Water,
+    Action_Reap,
+}
+// --------------------- //
+
 Upgrade :: enum {
 	Sprinkler,
 	Pigs,
@@ -43,6 +61,7 @@ Player :: struct {
 	toolDeck:        [dynamic]Tool,
     toolDiscard:     [dynamic]Tool,
 	hand:            [dynamic]ToolCard,
+    do_stack:        [dynamic]Action,
 }
 
 // -------CARDS--------
@@ -52,9 +71,9 @@ Seed :: enum {
 }
 
 SeedCard :: struct {
-	seed:         Seed,
-	price:        int,
-	water_levels: int,
+	seed:              Seed,
+	price:             int,
+	curr_water_level:  int,
 }
 
 Tool :: enum {
@@ -87,11 +106,35 @@ get_hand :: proc(player: ^Player) -> bool {
     return true
 }
 
+do_action :: proc(player: ^Player, action: Action) {
+    switch action in action {
+    case Action_Water:
+        action.field.card.curr_water_level += 1
+        append(&player.do_stack, action)
+    case Action_Reap:
+        fmt.printf("reaping %v\n", action.target)
+    }
+}
+
+undo_action :: proc(player: ^Player) {
+    action, ok := pop_safe(&player.do_stack)
+    if !ok { return }
+
+
+    switch action in action {
+    case Action_Water:
+        fmt.printf("undoing action=%v\n", action)
+        action.field.card.curr_water_level -= 1
+    case Action_Reap:
+        fmt.printf("undoing action=%v\n", action)
+    }
+}
 
 make_player :: proc() -> (player: Player) {
     player.money = 0
     player.toolDeck = make([dynamic]Tool, 15)
     player.seeds = make([dynamic]SeedCard, 20)
+    player.fields = make([dynamic]Field, 2)
 
     for t, i in default_tool_deck {
         player.toolDeck[i] = t
