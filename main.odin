@@ -516,26 +516,6 @@ import "core:math/rand"
 
 
 
-draw_card :: proc(player: ^gg.Player) -> bool {
-    tool := pop_safe(&player.toolDeck) or_return
-
-    tc := gg.ToolCard{ tool }
-
-    append(&player.hand, tc)
-
-    return true
-}
-
-get_hand :: proc(player: ^gg.Player) -> bool {
-    success := true
-    for i in 0..<5 {
-        if !draw_card(player) { success = false }
-    }
-
-    return success
-}
-
-
 main :: proc() {
     player := gg.make_player()
 
@@ -543,7 +523,7 @@ main :: proc() {
 
     fmt.printf("len(toolDeck) = %d\n", len(player.toolDeck))
 
-    get_hand(&player)
+    gg.get_hand(&player)
 
     for tool, i in player.hand {
         fmt.printf("tool%d => %v\n", i, tool)

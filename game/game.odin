@@ -69,6 +69,23 @@ ToolCard :: struct {
 }
 //-----------------------
 
+draw_card :: proc(player: ^Player) -> bool {
+    tool := pop_safe(&player.toolDeck) or_return
+
+    tc := ToolCard{ tool }
+
+    append(&player.hand, tc)
+
+    return true
+}
+
+get_hand :: proc(player: ^Player) -> bool {
+    for i in 0..<5 {
+        draw_card(player) or_return
+    }
+
+    return true
+}
 
 
 make_player :: proc() -> (player: Player) {
