@@ -514,26 +514,41 @@ main2 :: proc() {
 import gg "./game"
 import "core:math/rand"
 
+
+
+draw_card :: proc(player: ^gg.Player) -> bool {
+    tool := pop_safe(&player.toolDeck) or_return
+
+    tc := gg.ToolCard{ tool }
+
+    append(&player.hand, tc)
+
+    return true
+}
+
+get_hand :: proc(player: ^gg.Player) -> bool {
+    success := true
+    for i in 0..<5 {
+        if !draw_card(player) { success = false }
+    }
+
+    return success
+}
+
+
 main :: proc() {
     player := gg.make_player()
 
     rand.shuffle(player.toolDeck[:])
 
-    fmt.printf("playerHand=%v\t len(toolDeck) = %d\n", player.hand, len(player.toolDeck))
+    fmt.printf("len(toolDeck) = %d\n", len(player.toolDeck))
 
-    draw_card := proc(player: ^gg.Player) -> bool {
-        tool := pop_safe(&player.toolDeck) or_return
+    get_hand(&player)
 
-        tc := gg.ToolCard{ tool }
-
-        append(&player.hand, tc)
-
-        return true
+    for tool, i in player.hand {
+        fmt.printf("tool%d => %v\n", i, tool)
     }
 
 
-    for draw_card(&player) {
-        fmt.printf("playerHand=%v\t len(toolDeck) = %d\n", player.hand, len(player.toolDeck))
-    }
 
 }
