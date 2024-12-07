@@ -3,9 +3,11 @@ package main
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
+import "core:math/rand"
 import "core:slice"
 import "core:strings"
 import rl "vendor:raylib"
+import g "./game"
 
 
 CARD_WIDTH :: 25
@@ -77,6 +79,7 @@ GUI_State :: struct {
 
 
 gui_start :: proc(gui: ^GUI_State) {
+    rl.SetMouseScale(0.2, 0.2)
 
 	gui.mouse_pos = rl.GetMousePosition()
 
@@ -218,15 +221,6 @@ update_control :: proc(
 
 }
 
-//draw_card :: proc(card: ^Card) {
-//    color = card.color
-//    if card.state == .DRAGGING {
-//        color = rl.RED
-//        mp := gui_state.mouse_pos
-//        card.position = mp - gui_state.delta_rect_mouse
-//    }
-//}
-
 pos_to_rect :: proc(pos: rl.Vector2) -> rl.Rectangle {
 	return {pos.x, pos.y, CARD_WIDTH, CARD_HEIGHT}
 }
@@ -236,30 +230,16 @@ ease_out_cubic :: proc(number: f32) -> f32 {
 }
 
 
-Selecting :: struct {
-	card: ^Card,
-}
-
-Aiming :: struct {
-	card: ^Card,
-	//targets: []int,
-}
-
-Idle :: struct {}
-
-GameState :: union #no_nil {
-	Idle,
-	Selecting,
-	Aiming,
-}
-
 Game :: struct {
-	hand:      [dynamic]Card,
 	gui_state: GUI_State,
+    active_tab_idx: i32,
+    active_item: i32,
+    item_scroll_idx: i32,
+    player: ^g.Player,
 }
 
 
-reset_hand :: proc(hand: []Card) {
+reset_hand :: proc(hand: []g.ToolCard) {
 	hand_size := 4
 	gap := 10
 	hand_width := CARD_WIDTH * hand_size + gap * (hand_size - 1)
@@ -282,16 +262,16 @@ reset_hand :: proc(hand: []Card) {
 }
 
 
-draw_hand :: proc(game: ^Game) {
+draw_hand :: proc(player: ^g.Player) {
 
     dragging_idx := -1
-    dragging_card: Card
-    aiming_card: Card
+    dragging_card: g.ToolCard
+    aiming_card: g.ToolCard
     aiming: bool
 
-    for &card, i in game.hand {
-        color := rl.DARKBLUE
+    for &card, i in player.hand {
 
+        color := rl.DARKBLUE
         switch card.state {
             case .RELEASED: continue 
             case .DRAGGING:
@@ -309,39 +289,31 @@ draw_hand :: proc(game: ^Game) {
         }
 
 
-        if dragging_idx != i {
+        if dragging_idx != i && aiming_card != card {
             rl.DrawRectangleRec(pos_to_rect(card.position), color)
-            rl.DrawText(
-                strings.clone_to_cstring(card.text),
-                i32(card.position.x),
-                i32(card.position.y),
-                1,
-                rl.WHITE,
-            )
+
+            text: cstring
+
+            switch card.tool {
+            case .WateringCan:
+                text = "wateringCan"
+            case .Scyte:
+                text = "scyte"
+            case .WateringScyte:
+                text = "ws"
+            }
+
+            rl.DrawText(text, i32(card.position.x), i32(card.position.y), 1, rl.WHITE)
         }
     }
 
     if dragging_idx >= 0 {
         rl.DrawRectangleRec(pos_to_rect(dragging_card.position), rl.DARKGREEN)
-        rl.DrawText(
-            strings.clone_to_cstring(dragging_card.text),
-            i32(dragging_card.position.x),
-            i32(dragging_card.position.y),
-            1,
-            rl.WHITE,
-        )
     }
 
     if aiming {
 
-        rl.DrawRectangleRec(pos_to_rect(aiming_card.position), rl.MAGENTA)
-        rl.DrawText(
-            strings.clone_to_cstring(aiming_card.text),
-            i32(aiming_card.position.x),
-            i32(aiming_card.position.y),
-            1,
-            rl.WHITE,
-        )
+        rl.DrawRectangleRec(pos_to_rect(aiming_card.position), rl.ORANGE)
 
         start := rl.Vector2{aiming_card.position.x + CARD_WIDTH / 2, 70}
 
@@ -374,11 +346,100 @@ draw_hand :: proc(game: ^Game) {
 }
 
 
-main2 :: proc() {
+update :: proc(game: ^Game) {
+    #reverse for &card, i in game.player.hand {
+        id := Gui_Id(uintptr(&card))
+        res := update_control(&game.gui_state, id, pos_to_rect(card.position))
+
+        color := rl.DARKBLUE
+
+        switch {
+        case .Click in res:
+            mp := rl.GetMousePosition()
+            game.gui_state.delta_rect_mouse = mp - card.position
+        case .Active in res:
+            {
+                if card.state != .IDLE {break}
+                card.state = .DRAGGING
+            }
+        case .Active not_in res:
+            {
+                if card.state != .DRAGGING {break}
+                if int(card.position.y + CARD_HEIGHT) < DROP_LINE {
+                    card.state = .AIMING
+                } else {
+                    card.state = .IDLE
+
+                    x := (i * (CARD_WIDTH + CARD_GAP)) +
+                    int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
+                    int(HAND_MIDDLE)
+
+                    y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
+
+                    card.position = {f32(x), f32(y)}
+                }
+            }
+        }
+
+        if card.state == .DRAGGING {
+            mp := game.gui_state.mouse_pos
+            card.position = mp - game.gui_state.delta_rect_mouse
+
+            if card.position.y + CARD_HEIGHT < f32(DROP_LINE) {
+                card.state = .AIMING
+            }
+        } else if card.state == .AIMING {
+
+            if mp := rl.GetMousePosition(); mp.y > f32(DROP_LINE) {
+                card.state = .IDLE
+                x := (i * (CARD_WIDTH + CARD_GAP)) + int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - int(HAND_MIDDLE)
+
+                y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
+
+                card.position = {f32(x), f32(y)}
+            } else {
+                card.position.y = linalg.lerp(card.position.y, 70, 0.1)
+                card.position.x = linalg.lerp(card.position.x, f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - CARD_WIDTH / 2, 0.1)
+            }
+        }
+    }
+}
+
+render_game :: proc(game: ^Game) {
+    rl.SetMouseScale(0.2, 0.2)
+    draw_hand(game.player)
+}
+
+render_gui :: proc(game: ^Game) {
+    rl.SetMouseScale(1,1)
+    if rl.GuiButton({20,20, 80, 40}, "Draw Cards") {
+        if len(game.player.hand) != 5 {g.get_hand(game.player)}
+    }
+
+    rl.GuiToggleGroup({975, 2, 100, 40}, "game;assets;debug", &game.active_tab_idx)
+
+    items := strings.builder_make()
+
+    for card in game.player.hand {
+        switch card.tool {
+        case .WateringCan:
+            strings.write_string(&items, "watering_can;")
+        case .WateringScyte:
+            strings.write_string(&items, "watering_Scyte;")
+        case .Scyte:
+            strings.write_string(&items, "scyte;")
+        }
+    }
+
+    rl.GuiListView({1120, 50, 150, 300}, strings.to_cstring(&items), &game.item_scroll_idx, &game.active_item)
+}
+
+main :: proc() {
 
 	rl.InitWindow(1280, 720, "example")
 
 	rl.SetTargetFPS(60)
+    rl.GuiLoadStyle("style_dark.rgs")
 
 	sw := rl.GetScreenWidth() / CAMERA_ZOOM
 	sh := rl.GetScreenHeight() / CAMERA_ZOOM
@@ -386,161 +447,61 @@ main2 :: proc() {
 	drop_line := 100
 
 	game := Game{}
-	game.hand = [dynamic]Card{}
-
-
-	for i in 0 ..< HAND_SIZE {
-		x :=
-			(i * (CARD_WIDTH + CARD_GAP)) +
-			int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
-			int(HAND_MIDDLE)
-
-		y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
-
-		append(&game.hand, Card{position = {f32(x), f32(y)}, color = rl.DARKBLUE, text = "red"})
-	}
-
-	game.hand[0].type = .SINGLE_TARGET
+    player := g.make_player()
+	game.player = &player
 
 
 	camera := rl.Camera2D {
 		zoom = CAMERA_ZOOM,
 	}
 
+    // render_texture := rl.LoadRenderTexture(1080, 720)
+    // defer rl.UnloadRenderTexture(render_texture)
+
 	for !rl.WindowShouldClose() {
 
-		if rl.IsKeyPressed(.R) {
-			reset_hand(game.hand[:])
+		if rl.IsKeyPressed(.SPACE) {
+            g.get_hand(game.player)
 		}
+
+        rl.ClearBackground(rl.BLACK)
 
 		gui_start(&game.gui_state)
 
+        update(&game)
 
 		rl.BeginDrawing()
-		rl.BeginMode2D(camera)
+        rl.BeginMode2D(camera)
 
-		rl.SetMouseScale(0.2, 0.2)
+        render_game(&game)
 
+        rl.EndMode2D()
 
-		rl.ClearBackground(rl.BLACK)
+        render_gui(&game)
 
-		x := (sw - CARD_WIDTH) / 2
-
-		//rl.DrawRectangle(x, 100, CARD_WIDTH, CARD_HEIGHT, rl.DARKBLUE)
-
-        #reverse for &card, i in game.hand {
-
-			id := Gui_Id(uintptr(&card))
-			res := update_control(&game.gui_state, id, pos_to_rect(card.position))
-
-			color := card.color
-
-			switch {
-			case .Click in res:
-				mp := rl.GetMousePosition()
-				game.gui_state.delta_rect_mouse = mp - card.position
-			case .Active in res:
-				{
-					if card.state != .IDLE {break}
-					card.state = .DRAGGING
-				}
-			case .Active not_in res:
-				{
-					if card.state != .DRAGGING {break}
-					if int(card.position.y + CARD_HEIGHT) < drop_line {
-						switch card.type {
-						case .SINGLE_TARGET:
-							card.state = .AIMING
-						case .SKILL:
-                            ordered_remove(&game.hand, i)
-						}
-
-					} else {
-						card.state = .IDLE
-
-						x := (i * (CARD_WIDTH + CARD_GAP)) +
-							int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) -
-							int(HAND_MIDDLE)
-
-						y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
-
-						card.position = {f32(x), f32(y)}
-					}
-				}
-			}
-
-			if card.state == .DRAGGING {
-				mp := game.gui_state.mouse_pos
-				card.position = mp - game.gui_state.delta_rect_mouse
-
-				if card.position.y + CARD_HEIGHT < f32(drop_line) && card.type == .SINGLE_TARGET {
-                    card.state = .AIMING
-				}
-			} else if card.state == .AIMING {
-
-                if mp := rl.GetMousePosition(); mp.y > f32(DROP_LINE) {
-                    card.state = .IDLE
-                    x := (i * (CARD_WIDTH + CARD_GAP)) + int(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - int(HAND_MIDDLE)
-
-		            y := rl.GetScreenHeight() / CAMERA_ZOOM - CARD_HEIGHT - 5
-
-                    card.position = {f32(x), f32(y)}
-                } else {
-                    card.position.y = linalg.lerp(card.position.y, 70, 0.1)
-                    card.position.x = linalg.lerp(card.position.x, f32(rl.GetScreenWidth() / CAMERA_ZOOM / 2) - CARD_WIDTH / 2, 0.1)
-                }
-            }
-
-			switch card.type {
-			case .SINGLE_TARGET:
-				card.text = "SINGLE"
-			case .SKILL:
-				card.text = "SKILL"
-			}
-		}
-
-		draw_hand(&game)
-
-		gui_end(&game.gui_state)
-
-		rl.EndMode2D()
-
+        gui_end(&game.gui_state)
 		rl.EndDrawing()
 	}
 
 	rl.CloseWindow()
 }
 
-import gg "./game"
-import "core:math/rand"
 
-
-
-main :: proc() {
-    player := gg.make_player()
-    player.fields[0] = gg.Field { card = &player.seeds[0], water_level = 0 }
+main2 :: proc() {
+    player := g.make_player()
+    player.fields[0] = g.Field { card = &player.seeds[0], water_level = 0 }
 
     rand.shuffle(player.toolDeck[:])
 
-    gg.get_hand(&player)
+    g.get_hand(&player)
 
-    a := gg.Action_Water{ field = &player.fields[0], power = 1}
+    a := g.Action_Water{ field = &player.fields[0], power = 1}
 
     fmt.printf("before=%v\n", player.fields[0])
 
-    gg.do_action(&player, a)
-    gg.undo_action(&player)
-    gg.undo_action(&player)
-    gg.undo_action(&player)
-    gg.undo_action(&player)
-    gg.undo_action(&player)
-    gg.undo_action(&player)
-    gg.undo_action(&player)
+    g.do_action(&player, a)
 
     fmt.printf("after=%v\n", player.fields[0])
-
-
-
 
 
 }

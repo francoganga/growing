@@ -77,21 +77,31 @@ SeedCard :: struct {
 }
 
 Tool :: enum {
-	None,
 	WateringCan,
 	WateringScyte,
 	Scyte,
 }
 
+ToolCardState :: enum {
+	IDLE,
+	DRAGGING,
+	RELEASED,
+	AIMING,
+}
+
 ToolCard :: struct {
+    position: [2]f32,
+    water_charges: int,
+    reap_charges: int,
 	tool:      Tool,
+    state: ToolCardState,
 }
 //-----------------------
 
 draw_card :: proc(player: ^Player) -> bool {
     tool := pop_safe(&player.toolDeck) or_return
 
-    tc := ToolCard{ tool }
+    tc := ToolCard{ tool = tool }
 
     append(&player.hand, tc)
 
