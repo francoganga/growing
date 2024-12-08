@@ -229,13 +229,18 @@ ease_out_cubic :: proc(number: f32) -> f32 {
 	return 1.0 - math.pow(1 - number, 3)
 }
 
+UI_State :: struct {
+    active_tab_idx: i32,
+    item_scroll_idx: i32,
+    active_item: i32,
+}
 
 Game :: struct {
+    debug: bool,
 	gui_state: GUI_State,
-    active_tab_idx: i32,
-    active_item: i32,
-    item_scroll_idx: i32,
+    ui_state: UI_State,
     player: ^g.Player,
+    camera: ^rl.Camera2D
 }
 
 
@@ -262,14 +267,14 @@ reset_hand :: proc(hand: []g.ToolCard) {
 }
 
 
-draw_hand :: proc(player: ^g.Player) {
+draw_hand :: proc(game: ^Game) {
 
     dragging_idx := -1
     dragging_card: g.ToolCard
     aiming_card: g.ToolCard
     aiming: bool
 
-    for &card, i in player.hand {
+    for &card, i in game.player.hand {
 
         color := rl.DARKBLUE
         switch card.state {
@@ -291,19 +296,10 @@ draw_hand :: proc(player: ^g.Player) {
 
         if dragging_idx != i && aiming_card != card {
             rl.DrawRectangleRec(pos_to_rect(card.position), color)
+        }
 
-            text: cstring
-
-            switch card.tool {
-            case .WateringCan:
-                text = "wateringCan"
-            case .Scyte:
-                text = "scyte"
-            case .WateringScyte:
-                text = "ws"
-            }
-
-            rl.DrawText(text, i32(card.position.x), i32(card.position.y), 1, rl.WHITE)
+        if i32(i) == game.ui_state.active_item {
+            rl.DrawRectangleLinesEx(pos_to_rect(card.position), 1, rl.WHITE)
         }
     }
 
@@ -343,8 +339,42 @@ draw_hand :: proc(player: ^g.Player) {
             rl.DrawLineEx(points[i], points[i + 1], thick, rl.WHITE)
         }
     }
+
 }
 
+draw_ui :: proc(game: ^Game) {
+
+    if !game.debug { return }
+
+	sw := rl.GetScreenWidth() / CAMERA_ZOOM
+	sh := rl.GetScreenHeight() / CAMERA_ZOOM
+
+    cellWidth := 10
+
+
+    for x in 0..<sw {
+        start, end: rl.Vector2
+        x := f32(10 * x)
+        y := f32(0)
+        start = {x, 0}
+        end = { x, f32(sh) }
+
+        rl.DrawLineV(start, end, rl.GRAY)
+    }
+
+    for row in 0..<sh {
+        start, end: rl.Vector2
+
+        x := f32(0)
+        y := f32(10 * row)
+        start = {x, y}
+        end = {f32(sw), y }
+
+        rl.DrawLineV(start, end, rl.GRAY)
+    }
+
+
+}
 
 update :: proc(game: ^Game) {
     #reverse for &card, i in game.player.hand {
@@ -407,7 +437,8 @@ update :: proc(game: ^Game) {
 
 render_game :: proc(game: ^Game) {
     rl.SetMouseScale(0.2, 0.2)
-    draw_hand(game.player)
+    //draw_ui(game)
+    draw_hand(game)
 }
 
 render_gui :: proc(game: ^Game) {
@@ -416,22 +447,85 @@ render_gui :: proc(game: ^Game) {
         if len(game.player.hand) != 5 {g.get_hand(game.player)}
     }
 
-    rl.GuiToggleGroup({975, 2, 100, 40}, "game;assets;debug", &game.active_tab_idx)
+    //rl.GuiToggleGroup({975, 2, 100, 40}, "game;assets", &game.ui_state.active_tab_idx)
 
     items := strings.builder_make()
 
-    for card in game.player.hand {
+    for card, i in game.player.hand {
         switch card.tool {
         case .WateringCan:
-            strings.write_string(&items, "watering_can;")
+            strings.write_string(&items, "watering_can")
         case .WateringScyte:
-            strings.write_string(&items, "watering_Scyte;")
+            strings.write_string(&items, "watering_Scyte")
         case .Scyte:
-            strings.write_string(&items, "scyte;")
+            strings.write_string(&items, "scyte")
+        }
+
+        if i != len(game.player.hand) -1 { 
+            strings.write_string(&items, ";")
         }
     }
 
-    rl.GuiListView({1120, 50, 150, 300}, strings.to_cstring(&items), &game.item_scroll_idx, &game.active_item)
+    rl.GuiListView({1120, 200, 150, 150}, strings.to_cstring(&items), &game.ui_state.item_scroll_idx, &game.ui_state.active_item)
+
+    rl.GuiToggle({ 1200, 2, 80, 40 }, "DEBUG", &game.debug)
+
+    mp := game.gui_state.mouse_pos
+
+
+    if game.debug {
+
+        rl.GuiPanel({1120, 355, 150, 200}, nil)
+
+        toolText: cstring
+
+        if game.ui_state.active_item >= 0 {
+            card := game.player.hand[game.ui_state.active_item]
+
+            toolText = fmt.ctprintf("%#v", card)
+        }
+
+        glh := proc(s: cstring) -> i32 {
+            font := rl.GetFontDefault()
+            text_size := rl.MeasureTextEx(font, s, 1, 1)
+
+            res := i32(1)
+
+            for c in string(s) {
+                if c == '\n' {
+                    res += 1
+                }
+            }
+
+            return res * i32(text_size.y)
+        }
+
+        toolTextLH := glh(toolText)
+
+        tw := rl.MeasureText(toolText, 1)
+
+        //fmt.printf("tw=%d, toolTextLH=%d\n", tw, toolTextLH)
+
+        lr := rl.Rectangle {1130, 360, 150, 300}
+        //rl.GuiLabel(lr, toolText)
+        rl.DrawTextEx(rl.GetFontDefault(), toolText, {1130, 360}, 11, 1, rl.WHITE)
+        //rl.DrawRectangleLinesEx(lr, 1, rl.RED)
+
+        world_pos_text := fmt.ctprintf("world_pos: (%f, %f)", mp.x, mp.y)
+        rl.GuiLabel({10, 680, 300, 20}, world_pos_text)
+
+        screen_mp := rl.GetMousePosition()
+        screen_pos_text := fmt.ctprintf("screen_pos: (%f, %f)", screen_mp.x, screen_mp.y)
+        rl.GuiLabel({10, 700, 300, 20}, screen_pos_text)
+    }
+}
+
+render_debug_grid :: proc(debug: bool) {
+    if !debug { return }
+
+    sw := f32(rl.GetScreenWidth())
+    sh := f32(rl.GetScreenHeight())
+    rl.GuiGrid({0, 0, sw, sh}, "asd", 40, 2, nil)
 }
 
 main :: proc() {
@@ -449,9 +543,10 @@ main :: proc() {
 	game := Game{}
     player := g.make_player()
 	game.player = &player
+    rand.shuffle(player.toolDeck[:])
+    game.ui_state.active_item = -1
 
-
-	camera := rl.Camera2D {
+	game.camera = &rl.Camera2D {
 		zoom = CAMERA_ZOOM,
 	}
 
@@ -471,7 +566,10 @@ main :: proc() {
         update(&game)
 
 		rl.BeginDrawing()
-        rl.BeginMode2D(camera)
+
+        render_debug_grid(game.debug)
+
+        rl.BeginMode2D(game.camera^)
 
         render_game(&game)
 
