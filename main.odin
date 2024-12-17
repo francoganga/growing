@@ -311,7 +311,7 @@ draw_hand :: proc(game: ^Game) {
 
         rl.DrawRectangleRec(pos_to_rect(aiming_card.position), rl.ORANGE)
 
-        start := rl.Vector2{aiming_card.position.x + CARD_WIDTH / 2, 70}
+        start := rl.Vector2{aiming_card.position.x + CARD_WIDTH / 2, 70 + CARD_HEIGHT / 2}
 
         target := rl.GetMousePosition()
         distance := target - start
@@ -339,7 +339,48 @@ draw_hand :: proc(game: ^Game) {
             rl.DrawLineEx(points[i], points[i + 1], thick, rl.WHITE)
         }
     }
+}
 
+fields_to_rects :: proc(fields: []g.Field) -> []rl.Rectangle {
+    rects := make([dynamic]rl.Rectangle, len(fields))
+
+    y := 40
+
+    gap := 10
+    screen_center := int(rl.GetScreenWidth() / CAMERA_ZOOM / 2)
+
+    field_count := len(fields)
+
+    content_width := CARD_WIDTH * field_count + gap * (field_count - 1)
+
+    for field, i in fields {
+        rects[i] = {
+            f32(screen_center + CARD_WIDTH * i + gap * i - content_width / 2),
+            f32(y),
+            CARD_WIDTH,
+            CARD_HEIGHT
+        }
+    }
+
+    return rects[:]
+}
+
+draw_fields :: proc(game: ^Game) {
+
+    rect_fields := fields_to_rects(game.player.fields[:])
+
+    //rl.DrawRectangleLines(i32(screen_center - content_width / 2), i32(y), i32(content_width), CARD_HEIGHT, rl.WHITE)
+
+    for rec, i in rect_fields {
+        card := game.player.fields[i].card
+
+
+        rl.DrawRectangleRec(rec, rl.MAROON)
+
+        if card != nil {
+            rl.DrawText(fmt.ctprintf("%d", card.curr_water_level), i32(rec.x + 5), i32(rec.y + 5), 1, rl.WHITE)
+        }
+    }
 }
 
 draw_ui :: proc(game: ^Game) {
@@ -376,7 +417,29 @@ draw_ui :: proc(game: ^Game) {
 
 }
 
+is_aiming :: proc(game: ^Game) -> ^g.ToolCard {
+    for &card in game.player.hand {
+        if card.state == .AIMING { return &card }
+    }
+
+    return nil
+}
+
 update :: proc(game: ^Game) {
+
+    rect_fields := fields_to_rects(game.player.fields[:])
+
+    if rl.IsMouseButtonPressed(.LEFT) && is_aiming(game) != nil {
+        for field, i in rect_fields {
+            if rl.CheckCollisionPointRec(rl.GetMousePosition(), field) {
+                field := game.player.fields[i]
+
+                g.do_action(game.player, g.Action_Water{1, is_aiming(game), &field})
+            }
+        }
+    }
+
+
     #reverse for &card, i in game.player.hand {
         id := Gui_Id(uintptr(&card))
         res := update_control(&game.gui_state, id, pos_to_rect(card.position))
@@ -419,6 +482,7 @@ update :: proc(game: ^Game) {
                 card.state = .AIMING
             }
         } else if card.state == .AIMING {
+            rl.SetMouseCursor(.CROSSHAIR)
 
             if mp := rl.GetMousePosition(); mp.y > f32(DROP_LINE) {
                 card.state = .IDLE
@@ -438,6 +502,7 @@ update :: proc(game: ^Game) {
 render_game :: proc(game: ^Game) {
     rl.SetMouseScale(0.2, 0.2)
     //draw_ui(game)
+    draw_fields(game)
     draw_hand(game)
 }
 
@@ -485,31 +550,7 @@ render_gui :: proc(game: ^Game) {
             toolText = fmt.ctprintf("%#v", card)
         }
 
-        glh := proc(s: cstring) -> i32 {
-            font := rl.GetFontDefault()
-            text_size := rl.MeasureTextEx(font, s, 1, 1)
-
-            res := i32(1)
-
-            for c in string(s) {
-                if c == '\n' {
-                    res += 1
-                }
-            }
-
-            return res * i32(text_size.y)
-        }
-
-        toolTextLH := glh(toolText)
-
-        tw := rl.MeasureText(toolText, 1)
-
-        //fmt.printf("tw=%d, toolTextLH=%d\n", tw, toolTextLH)
-
-        lr := rl.Rectangle {1130, 360, 150, 300}
-        //rl.GuiLabel(lr, toolText)
         rl.DrawTextEx(rl.GetFontDefault(), toolText, {1130, 360}, 11, 1, rl.WHITE)
-        //rl.DrawRectangleLinesEx(lr, 1, rl.RED)
 
         world_pos_text := fmt.ctprintf("world_pos: (%f, %f)", mp.x, mp.y)
         rl.GuiLabel({10, 680, 300, 20}, world_pos_text)
@@ -545,6 +586,7 @@ main :: proc() {
 	game.player = &player
     rand.shuffle(player.toolDeck[:])
     game.ui_state.active_item = -1
+    game.player.fields[0].card = &g.SeedCard{}
 
 	game.camera = &rl.Camera2D {
 		zoom = CAMERA_ZOOM,

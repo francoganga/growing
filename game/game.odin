@@ -25,9 +25,16 @@ watering_levels :: [Seed]int {
     .Tomato = 2,
 }
 
+tool_water_charges := [Tool]int {
+    .Scyte = 0,
+    .WateringCan = 1,
+    .WateringScyte = 1,
+}
+
 // ------ACTIONS--------- //
 Action_Water :: struct {
     power: int,
+    tool: ^ToolCard,
     field: ^Field,
 }
 
@@ -101,7 +108,9 @@ ToolCard :: struct {
 draw_card :: proc(player: ^Player) -> bool {
     tool := pop_safe(&player.toolDeck) or_return
 
-    tc := ToolCard{ tool = tool }
+    water_charges := tool_water_charges[tool]
+
+    tc := ToolCard{ tool = tool, water_charges = water_charges }
 
     append(&player.hand, tc)
 
@@ -119,7 +128,15 @@ get_hand :: proc(player: ^Player) -> bool {
 do_action :: proc(player: ^Player, action: Action) {
     switch action in action {
     case Action_Water:
-        action.field.card.curr_water_level += 1
+        if action.tool.water_charges > 0 {
+            action.tool.water_charges -= 1
+            action.field.card.curr_water_level += 1
+        }
+
+        if action.tool.water_charges == 0 && action.tool.reap_charges == 0 {
+            unordered_remove(player.hand
+        }
+
         append(&player.do_stack, action)
     case Action_Reap:
         fmt.printf("reaping %v\n", action.target)
