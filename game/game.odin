@@ -134,7 +134,7 @@ do_action :: proc(player: ^Player, action: Action) {
         }
 
         if action.tool.water_charges == 0 && action.tool.reap_charges == 0 {
-            unordered_remove(player.hand
+            //unordered_remove(player.hand
         }
 
         append(&player.do_stack, action)

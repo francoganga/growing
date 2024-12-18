@@ -8,6 +8,9 @@ import "core:slice"
 import "core:strings"
 import rl "vendor:raylib"
 import g "./game"
+import imgui_rl "./lib/imgui_raylib"
+import imgui "./lib/imgui_raylib/odin-imgui"
+
 
 
 CARD_WIDTH :: 25
@@ -561,6 +564,10 @@ render_gui :: proc(game: ^Game) {
     }
 }
 
+render_gui2 :: proc(game: ^Game) {
+    imgui.Button("example")
+}
+
 render_debug_grid :: proc(debug: bool) {
     if !debug { return }
 
@@ -607,6 +614,14 @@ main :: proc() {
 
         update(&game)
 
+
+        // --- IMGUI
+        imgui_rl.process_events()
+        imgui_rl.new_frame()
+        imgui.NewFrame()
+
+        render_gui2()
+
 		rl.BeginDrawing()
 
         render_debug_grid(game.debug)
@@ -620,6 +635,9 @@ main :: proc() {
         render_gui(&game)
 
         gui_end(&game.gui_state)
+        imgui.Render()
+	    imgui_rl.render_draw_data(imgui.GetDrawData())
+
 		rl.EndDrawing()
 	}
 
